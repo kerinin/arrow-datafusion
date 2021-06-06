@@ -109,6 +109,18 @@ pub enum LogicalPlan {
         /// The schema description of the aggregate output
         schema: DFSchemaRef,
     },
+    /// EachAggregate aggregates its input the same as Aggregate, producing
+    /// the aggregated value each time it is updated.
+    EachAggregate {
+        /// The incoming logical plan
+        input: Arc<LogicalPlan>,
+        /// Grouping expressions
+        group_expr: Vec<Expr>,
+        /// Aggregate expressions
+        aggr_expr: Vec<Expr>,
+        /// The schema description of the aggregate output
+        schema: DFSchemaRef,
+    },
     /// Sorts its input according to a list of sort expressions.
     Sort {
         /// The sort expressions
@@ -227,6 +239,7 @@ impl LogicalPlan {
             LogicalPlan::Filter { input, .. } => input.schema(),
             LogicalPlan::Window { schema, .. } => &schema,
             LogicalPlan::Aggregate { schema, .. } => &schema,
+            LogicalPlan::EachAggregate { schema, .. } => &schema,
             LogicalPlan::Sort { input, .. } => input.schema(),
             LogicalPlan::Join { schema, .. } => &schema,
             LogicalPlan::CrossJoin { schema, .. } => &schema,
@@ -247,6 +260,7 @@ impl LogicalPlan {
             } => vec![&projected_schema],
             LogicalPlan::Window { input, schema, .. }
             | LogicalPlan::Aggregate { input, schema, .. }
+            | LogicalPlan::EachAggregate { input, schema, .. }
             | LogicalPlan::Projection { input, schema, .. } => {
                 let mut schemas = input.all_schemas();
                 schemas.insert(0, &schema);
@@ -323,6 +337,15 @@ impl LogicalPlan {
                 result.extend(aggr_expr.clone());
                 result
             }
+            LogicalPlan::EachAggregate {
+                group_expr,
+                aggr_expr,
+                ..
+            } => {
+                let mut result = group_expr.clone();
+                result.extend(aggr_expr.clone());
+                result
+            }
             LogicalPlan::Join { on, .. } => {
                 on.iter().flat_map(|(l, r)| vec![col(l), col(r)]).collect()
             }
@@ -350,6 +373,7 @@ impl LogicalPlan {
             LogicalPlan::Repartition { input, .. } => vec![input],
             LogicalPlan::Window { input, .. } => vec![input],
             LogicalPlan::Aggregate { input, .. } => vec![input],
+            LogicalPlan::EachAggregate { input, .. } => vec![input],
             LogicalPlan::Sort { input, .. } => vec![input],
             LogicalPlan::Join { left, right, .. } => vec![left, right],
             LogicalPlan::CrossJoin { left, right, .. } => vec![left, right],
@@ -444,6 +468,7 @@ impl LogicalPlan {
             LogicalPlan::Repartition { input, .. } => input.accept(visitor)?,
             LogicalPlan::Window { input, .. } => input.accept(visitor)?,
             LogicalPlan::Aggregate { input, .. } => input.accept(visitor)?,
+            LogicalPlan::EachAggregate { input, .. } => input.accept(visitor)?,
             LogicalPlan::Sort { input, .. } => input.accept(visitor)?,
             LogicalPlan::Join { left, right, .. }
             | LogicalPlan::CrossJoin { left, right, .. } => {
@@ -716,6 +741,15 @@ impl LogicalPlan {
                     } => write!(
                         f,
                         "Aggregate: groupBy=[{:?}], aggr=[{:?}]",
+                        group_expr, aggr_expr
+                    ),
+                    LogicalPlan::EachAggregate {
+                        ref group_expr,
+                        ref aggr_expr,
+                        ..
+                    } => write!(
+                        f,
+                        "EachAggregate: groupBy=[{:?}], aggr=[{:?}]",
                         group_expr, aggr_expr
                     ),
                     LogicalPlan::Sort { ref expr, .. } => {

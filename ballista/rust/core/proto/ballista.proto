@@ -219,6 +219,7 @@ message LogicalPlanNode {
     SelectionNode selection = 4;
     LimitNode limit = 5;
     AggregateNode aggregate = 6;
+    EachAggregateNode each_aggregate = 14;
     JoinNode join = 7;
     SortNode sort = 8;
     RepartitionNode repartition = 9;
@@ -309,6 +310,12 @@ message DfField{
 }
 
 message AggregateNode {
+  LogicalPlanNode input = 1;
+  repeated LogicalExprNode group_expr = 2;
+  repeated LogicalExprNode aggr_expr = 3;
+}
+
+message EachAggregateNode {
   LogicalPlanNode input = 1;
   repeated LogicalExprNode group_expr = 2;
   repeated LogicalExprNode aggr_expr = 3;

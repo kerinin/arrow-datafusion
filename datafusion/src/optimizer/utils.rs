@@ -214,6 +214,14 @@ pub fn from_plan(
             input: Arc::new(inputs[0].clone()),
             schema: schema.clone(),
         }),
+        LogicalPlan::EachAggregate {
+            group_expr, schema, ..
+        } => Ok(LogicalPlan::EachAggregate {
+            group_expr: expr[0..group_expr.len()].to_vec(),
+            aggr_expr: expr[group_expr.len()..].to_vec(),
+            input: Arc::new(inputs[0].clone()),
+            schema: schema.clone(),
+        }),
         LogicalPlan::Sort { .. } => Ok(LogicalPlan::Sort {
             expr: expr.to_vec(),
             input: Arc::new(inputs[0].clone()),

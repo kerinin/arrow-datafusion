@@ -63,6 +63,7 @@ fn get_num_rows(logical_plan: &LogicalPlan) -> Option<usize> {
             // we do not know the cardinality of the grouping keys
             None
         }
+        LogicalPlan::EachAggregate { input, .. } => get_num_rows(input),
         LogicalPlan::Filter { .. } => {
             // we cannot yet predict how many rows will be produced by a filter because
             // we don't know how selective it is (how many rows it will filter out)
@@ -178,6 +179,7 @@ impl OptimizerRule for HashBuildProbeOrder {
             LogicalPlan::Projection { .. }
             | LogicalPlan::Window { .. }
             | LogicalPlan::Aggregate { .. }
+            | LogicalPlan::EachAggregate { .. }
             | LogicalPlan::TableScan { .. }
             | LogicalPlan::Limit { .. }
             | LogicalPlan::Filter { .. }

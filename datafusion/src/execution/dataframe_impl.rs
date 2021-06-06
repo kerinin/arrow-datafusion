@@ -89,6 +89,17 @@ impl DataFrame for DataFrameImpl {
         Ok(Arc::new(DataFrameImpl::new(self.ctx_state.clone(), &plan)))
     }
 
+    fn each_aggregate(
+        &self,
+        group_expr: Vec<Expr>,
+        aggr_expr: Vec<Expr>,
+    ) -> Result<Arc<dyn DataFrame>> {
+        let plan = LogicalPlanBuilder::from(&self.plan)
+            .each_aggregate(group_expr, aggr_expr)?
+            .build()?;
+        Ok(Arc::new(DataFrameImpl::new(self.ctx_state.clone(), &plan)))
+    }
+
     /// Limit the number of rows
     fn limit(&self, n: usize) -> Result<Arc<dyn DataFrame>> {
         let plan = LogicalPlanBuilder::from(&self.plan).limit(n)?.build()?;

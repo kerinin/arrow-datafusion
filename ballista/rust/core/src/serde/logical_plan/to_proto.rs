@@ -835,6 +835,29 @@ impl TryInto<protobuf::LogicalPlanNode> for &LogicalPlan {
                     ))),
                 })
             }
+            LogicalPlan::EachAggregate {
+                input,
+                group_expr,
+                aggr_expr,
+                ..
+            } => {
+                let input: protobuf::LogicalPlanNode = input.as_ref().try_into()?;
+                Ok(protobuf::LogicalPlanNode {
+                    logical_plan_type: Some(LogicalPlanType::EachAggregate(Box::new(
+                        protobuf::EachAggregateNode {
+                            input: Some(Box::new(input)),
+                            group_expr: group_expr
+                                .iter()
+                                .map(|expr| expr.try_into())
+                                .collect::<Result<Vec<_>, BallistaError>>()?,
+                            aggr_expr: aggr_expr
+                                .iter()
+                                .map(|expr| expr.try_into())
+                                .collect::<Result<Vec<_>, BallistaError>>()?,
+                        },
+                    ))),
+                })
+            }
             LogicalPlan::Join {
                 left,
                 right,

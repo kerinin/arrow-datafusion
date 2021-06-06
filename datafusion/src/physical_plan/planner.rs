@@ -33,6 +33,7 @@ use crate::physical_plan::expressions;
 use crate::physical_plan::expressions::{CaseExpr, Column, Literal, PhysicalSortExpr};
 use crate::physical_plan::filter::FilterExec;
 use crate::physical_plan::hash_aggregate::{AggregateMode, HashAggregateExec};
+use crate::physical_plan::hash_each_aggregate::*;
 use crate::physical_plan::hash_join::HashJoinExec;
 use crate::physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
 use crate::physical_plan::projection::ProjectionExec;
@@ -255,6 +256,103 @@ impl DefaultPhysicalPlanner {
 
                     Ok(Arc::new(HashAggregateExec::try_new(
                         AggregateMode::Final,
+                        final_group
+                            .iter()
+                            .enumerate()
+                            .map(|(i, expr)| (expr.clone(), groups[i].1.clone()))
+                            .collect(),
+                        aggregates,
+                        initial_aggr,
+                        input_schema,
+                    )?))
+                }
+            }
+            LogicalPlan::EachAggregate {
+                input,
+                group_expr,
+                aggr_expr,
+                ..
+            } => {
+                // Initially need to perform the aggregate and then merge the partitions
+                let input_exec = self.create_initial_plan(input, ctx_state)?;
+                let input_schema = input_exec.schema();
+                let physical_input_schema = input_exec.as_ref().schema();
+                let logical_input_schema = input.as_ref().schema();
+
+                let groups = group_expr
+                    .iter()
+                    .map(|e| {
+                        tuple_err((
+                            self.create_physical_expr(
+                                e,
+                                &physical_input_schema,
+                                ctx_state,
+                            ),
+                            e.name(&logical_input_schema),
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let aggregates = aggr_expr
+                    .iter()
+                    .map(|e| {
+                        self.create_aggregate_expr(
+                            e,
+                            &logical_input_schema,
+                            &physical_input_schema,
+                            ctx_state,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                let initial_aggr = Arc::new(HashEachAggregateExec::try_new(
+                    EachAggregateMode::Partial,
+                    groups.clone(),
+                    aggregates.clone(),
+                    input_exec,
+                    input_schema.clone(),
+                )?);
+
+                let final_group: Vec<Arc<dyn PhysicalExpr>> =
+                    (0..groups.len()).map(|i| col(&groups[i].1)).collect();
+
+                // TODO: dictionary type not yet supported in Hash Repartition
+                let contains_dict = groups
+                    .iter()
+                    .flat_map(|x| x.0.data_type(physical_input_schema.as_ref()))
+                    .any(|x| matches!(x, DataType::Dictionary(_, _)));
+
+                if !groups.is_empty()
+                    && ctx_state.config.concurrency > 1
+                    && ctx_state.config.repartition_aggregations
+                    && !contains_dict
+                {
+                    // Divide partial hash aggregates into multiple partitions by hash key
+                    let hash_repartition = Arc::new(RepartitionExec::try_new(
+                        initial_aggr,
+                        Partitioning::Hash(
+                            final_group.clone(),
+                            ctx_state.config.concurrency,
+                        ),
+                    )?);
+
+                    // Combine hashaggregates within the partition
+                    Ok(Arc::new(HashEachAggregateExec::try_new(
+                        EachAggregateMode::FinalPartitioned,
+                        final_group
+                            .iter()
+                            .enumerate()
+                            .map(|(i, expr)| (expr.clone(), groups[i].1.clone()))
+                            .collect(),
+                        aggregates,
+                        hash_repartition,
+                        input_schema,
+                    )?))
+                } else {
+                    // construct a second aggregation, keeping the final column name equal to the first aggregation
+                    // and the expressions corresponding to the respective aggregate
+
+                    Ok(Arc::new(HashEachAggregateExec::try_new(
+                        EachAggregateMode::Final,
                         final_group
                             .iter()
                             .enumerate()

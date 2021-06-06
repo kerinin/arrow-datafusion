@@ -592,6 +592,7 @@ pub mod filter;
 pub mod functions;
 pub mod group_scalar;
 pub mod hash_aggregate;
+pub mod hash_each_aggregate;
 pub mod hash_join;
 pub mod hash_utils;
 pub mod limit;

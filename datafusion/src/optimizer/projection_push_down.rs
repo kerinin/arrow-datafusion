@@ -299,6 +299,57 @@ fn optimize_plan(
                 schema: DFSchemaRef::new(new_schema),
             })
         }
+        LogicalPlan::EachAggregate {
+            schema,
+            input,
+            group_expr,
+            aggr_expr,
+            ..
+        } => {
+            // each aggregate:
+            // * remove any aggregate expression that is not required
+            // * construct the new set of required columns
+
+            utils::exprlist_to_column_names(group_expr, &mut new_required_columns)?;
+
+            // Gather all columns needed for expressions in this Aggregate
+            let mut new_aggr_expr = Vec::new();
+            aggr_expr.iter().try_for_each(|expr| {
+                let name = &expr.name(&schema)?;
+
+                if required_columns.contains(name) {
+                    new_aggr_expr.push(expr.clone());
+                    new_required_columns.insert(name.clone());
+
+                    // add to the new set of required columns
+                    utils::expr_to_column_names(expr, &mut new_required_columns)
+                } else {
+                    Ok(())
+                }
+            })?;
+
+            let new_schema = DFSchema::new(
+                schema
+                    .fields()
+                    .iter()
+                    .filter(|x| new_required_columns.contains(x.name()))
+                    .cloned()
+                    .collect(),
+            )?;
+
+            Ok(LogicalPlan::EachAggregate {
+                group_expr: group_expr.clone(),
+                aggr_expr: new_aggr_expr,
+                input: Arc::new(optimize_plan(
+                    optimizer,
+                    &input,
+                    &new_required_columns,
+                    true,
+                    execution_props,
+                )?),
+                schema: DFSchemaRef::new(new_schema),
+            })
+        }
         // scans:
         // * remove un-used columns from the scan projection
         LogicalPlan::TableScan {

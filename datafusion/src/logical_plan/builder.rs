@@ -360,6 +360,33 @@ impl LogicalPlanBuilder {
         }))
     }
 
+    /// Apply an aggregate: grouping on the `group_expr` expressions
+    /// and calculating `aggr_expr` aggregates for each distinct
+    /// value of the `group_expr`, producing a value each input;
+    pub fn each_aggregate(
+        &self,
+        group_expr: impl IntoIterator<Item = Expr>,
+        aggr_expr: impl IntoIterator<Item = Expr>,
+    ) -> Result<Self> {
+        let group_expr = group_expr.into_iter().collect::<Vec<Expr>>();
+        let aggr_expr = aggr_expr.into_iter().collect::<Vec<Expr>>();
+
+        let all_expr = group_expr.iter().chain(aggr_expr.iter());
+
+        validate_unique_names("EachAggregations", all_expr.clone(), self.plan.schema())?;
+
+        // TODO: Does this need to be made into a collection?
+        let aggr_schema =
+            DFSchema::new(exprlist_to_fields(all_expr, self.plan.schema())?)?;
+
+        Ok(Self::from(&LogicalPlan::EachAggregate {
+            input: Arc::new(self.plan.clone()),
+            group_expr,
+            aggr_expr,
+            schema: DFSchemaRef::new(aggr_schema),
+        }))
+    }
+
     /// Create an expression to represent the explanation of the plan
     pub fn explain(&self, verbose: bool) -> Result<Self> {
         let stringified_plans = vec![StringifiedPlan::new(

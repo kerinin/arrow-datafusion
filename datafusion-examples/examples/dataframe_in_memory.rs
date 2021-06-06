@@ -52,10 +52,10 @@ async fn main() -> Result<()> {
     ctx.register_table("t", Arc::new(provider))?;
     let df = ctx.table("t")?;
 
-    // construct an expression corresponding to "SELECT a, b FROM t WHERE b = 10" in SQL
-    let filter = col("b").eq(lit(10));
-
-    let df = df.select_columns(&["a", "b"])?.filter(filter)?;
+    // Sum column b
+    let df =
+        df.each_aggregate(vec![], vec![sum(col("b")), sum(col("b")).alias("sum_b")])?;
+    let df = df.select_columns(&["SUM(b)", "sum_b"])?;
 
     // execute
     let results = df.collect().await?;

@@ -121,6 +121,23 @@ impl TryInto<LogicalPlan> for &protobuf::LogicalPlanNode {
                     .build()
                     .map_err(|e| e.into())
             }
+            LogicalPlanType::EachAggregate(each_aggregate) => {
+                let input: LogicalPlan = convert_box_required!(each_aggregate.input)?;
+                let group_expr = each_aggregate
+                    .group_expr
+                    .iter()
+                    .map(|expr| expr.try_into())
+                    .collect::<Result<Vec<_>, _>>()?;
+                let aggr_expr = each_aggregate
+                    .aggr_expr
+                    .iter()
+                    .map(|expr| expr.try_into())
+                    .collect::<Result<Vec<_>, _>>()?;
+                LogicalPlanBuilder::from(&input)
+                    .each_aggregate(group_expr, aggr_expr)?
+                    .build()
+                    .map_err(|e| e.into())
+            }
             LogicalPlanType::CsvScan(scan) => {
                 let schema: Schema = convert_required!(scan.schema)?;
                 let options = CsvReadOptions::new()

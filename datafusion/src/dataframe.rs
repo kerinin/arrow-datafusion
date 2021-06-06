@@ -118,6 +118,27 @@ pub trait DataFrame: Send + Sync {
         aggr_expr: Vec<Expr>,
     ) -> Result<Arc<dyn DataFrame>>;
 
+    /// Like aggregate, but produces the accumulator's value each time it's updated.
+    ///
+    /// ```
+    /// # use datafusion::prelude::*;
+    /// # use datafusion::error::Result;
+    /// # fn main() -> Result<()> {
+    /// let mut ctx = ExecutionContext::new();
+    /// let df = ctx.read_csv("tests/example.csv", CsvReadOptions::new())?;
+    ///
+    /// let _ = df.each_aggregate(vec![col("a")], vec![min(col("b"))])?;
+    ///
+    /// let _ = df.each_aggregate(vec![], vec![min(col("b"))])?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn each_aggregate(
+        &self,
+        group_expr: Vec<Expr>,
+        aggr_expr: Vec<Expr>,
+    ) -> Result<Arc<dyn DataFrame>>;
+
     /// Limit the number of rows returned from this DataFrame.
     ///
     /// ```

@@ -74,6 +74,7 @@ impl OptimizerRule for ConstantFolding {
             LogicalPlan::Projection { .. }
             | LogicalPlan::Window { .. }
             | LogicalPlan::Aggregate { .. }
+            | LogicalPlan::EachAggregate { .. }
             | LogicalPlan::Repartition { .. }
             | LogicalPlan::CreateExternalTable { .. }
             | LogicalPlan::Extension { .. }
