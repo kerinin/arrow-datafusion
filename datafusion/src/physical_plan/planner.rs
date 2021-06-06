@@ -304,65 +304,14 @@ impl DefaultPhysicalPlanner {
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                let initial_aggr = Arc::new(HashEachAggregateExec::try_new(
-                    EachAggregateMode::Partial,
+                // NOTE: HashEachAggregate requires that children be distributed in such a way that
+                // a given partition contains all the data for any groups present in the partition.
+                Ok(Arc::new(HashEachAggregateExec::try_new(
                     groups.clone(),
                     aggregates.clone(),
                     input_exec,
                     input_schema.clone(),
-                )?);
-
-                let final_group: Vec<Arc<dyn PhysicalExpr>> =
-                    (0..groups.len()).map(|i| col(&groups[i].1)).collect();
-
-                // TODO: dictionary type not yet supported in Hash Repartition
-                let contains_dict = groups
-                    .iter()
-                    .flat_map(|x| x.0.data_type(physical_input_schema.as_ref()))
-                    .any(|x| matches!(x, DataType::Dictionary(_, _)));
-
-                if !groups.is_empty()
-                    && ctx_state.config.concurrency > 1
-                    && ctx_state.config.repartition_aggregations
-                    && !contains_dict
-                {
-                    // Divide partial hash aggregates into multiple partitions by hash key
-                    let hash_repartition = Arc::new(RepartitionExec::try_new(
-                        initial_aggr,
-                        Partitioning::Hash(
-                            final_group.clone(),
-                            ctx_state.config.concurrency,
-                        ),
-                    )?);
-
-                    // Combine hashaggregates within the partition
-                    Ok(Arc::new(HashEachAggregateExec::try_new(
-                        EachAggregateMode::FinalPartitioned,
-                        final_group
-                            .iter()
-                            .enumerate()
-                            .map(|(i, expr)| (expr.clone(), groups[i].1.clone()))
-                            .collect(),
-                        aggregates,
-                        hash_repartition,
-                        input_schema,
-                    )?))
-                } else {
-                    // construct a second aggregation, keeping the final column name equal to the first aggregation
-                    // and the expressions corresponding to the respective aggregate
-
-                    Ok(Arc::new(HashEachAggregateExec::try_new(
-                        EachAggregateMode::Final,
-                        final_group
-                            .iter()
-                            .enumerate()
-                            .map(|(i, expr)| (expr.clone(), groups[i].1.clone()))
-                            .collect(),
-                        aggregates,
-                        initial_aggr,
-                        input_schema,
-                    )?))
-                }
+                )?))
             }
             LogicalPlan::Projection { input, expr, .. } => {
                 let input_exec = self.create_initial_plan(input, ctx_state)?;

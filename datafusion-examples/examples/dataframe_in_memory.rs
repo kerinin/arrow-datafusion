@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
-            Arc::new(StringArray::from(vec!["a", "b", "c", "d"])),
+            Arc::new(StringArray::from(vec!["foo", "foo", "bar", "bar"])),
             Arc::new(Int32Array::from(vec![1, 10, 10, 100])),
         ],
     )?;
@@ -52,10 +52,14 @@ async fn main() -> Result<()> {
     ctx.register_table("t", Arc::new(provider))?;
     let df = ctx.table("t")?;
 
+    // execute
+    let results = df.collect().await?;
+
+    // print the results
+    pretty::print_batches(&results)?;
+
     // Sum column b
-    let df =
-        df.each_aggregate(vec![], vec![sum(col("b")), sum(col("b")).alias("sum_b")])?;
-    let df = df.select_columns(&["SUM(b)", "sum_b"])?;
+    let df = df.each_aggregate(vec![], vec![sum(col("b"))])?;
 
     // execute
     let results = df.collect().await?;
